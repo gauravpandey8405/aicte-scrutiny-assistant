@@ -5,9 +5,9 @@ from engine import extract_text_from_file, run_scrutiny_checks, detect_ela, gene
 st.set_page_config(page_title="AICTE Scrutiny Assistant", layout="wide")
 
 st.title("AICTE EoA Scrutiny Decision-Support System")
-st.caption("AI-Powered Pre-Screening, Document Authentication & Regulatory Compliance Checker")
+st.caption("Universal AI Pre-Screening, Document Authentication & APH Regulatory Compliance Engine")
 
-uploaded_file = st.file_uploader("Upload Scrutiny File (.pdf, .txt, .png, .jpg)", type=["pdf", "txt", "png", "jpg"])
+uploaded_file = st.file_uploader("Upload Any College Scrutiny Dossier (.pdf, .txt, .png, .jpg)", type=["pdf", "txt", "png", "jpg"])
 
 if uploaded_file:
     file_path = f"temp_{uploaded_file.name}"
@@ -26,19 +26,20 @@ if uploaded_file:
                 st.image(file_path, caption="Uploaded File / Infrastructure Proof", use_container_width=True)
 
         with col2:
-            st.subheader("Audit & Compliance Findings")
+            st.subheader("Universal AICTE Handbook Audit Findings")
             if file_path.endswith((".pdf", ".txt")):
-                findings = run_scrutiny_checks(text)
+                findings, detected_college = run_scrutiny_checks(text)
                 
-                # Metric Summary Cards
                 total_checks = len(findings)
                 flagged_count = sum(1 for f in findings if "FLAGGED" in f["status"])
                 verified_count = total_checks - flagged_count
                 
+                st.info(f"**Evaluated Entity:** {detected_college}")
+                
                 m1, m2, m3 = st.columns(3)
-                m1.metric("Total Parameters", total_checks)
-                m2.metric("Verified Valid", verified_count)
-                m3.metric("Deficiencies Flagged", flagged_count)
+                m1.metric("Total Checks", total_checks)
+                m2.metric("Compliant", verified_count)
+                m3.metric("Flagged Deficiencies", flagged_count)
                 st.divider()
 
                 for item in findings:
@@ -51,12 +52,11 @@ if uploaded_file:
                     st.write(f"- **Officer Note:** {item['observation']}")
                     st.divider()
 
-                # Generate Downloadable PDF Audit Report
-                pdf_report = generate_scrutiny_pdf(findings)
+                pdf_report = generate_scrutiny_pdf(findings, institution_name=detected_college)
                 st.download_button(
-                    label="📄 Download Scrutiny Audit Report (PDF)",
+                    label="📄 Download Official Scrutiny Audit Report (PDF)",
                     data=pdf_report,
-                    file_name="AICTE_Scrutiny_Audit_Report.pdf",
+                    file_name=f"AICTE_Audit_{detected_college.replace(' ', '_')}.pdf",
                     mime="application/pdf"
                 )
             else:
@@ -66,6 +66,5 @@ if uploaded_file:
                 st.warning("Advisory: Pixel brightness spikes highlight localized modification/pasted content.")
                 
     finally:
-        # Automatic file cleanup
         if os.path.exists(file_path):
             os.remove(file_path)
