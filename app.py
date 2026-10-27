@@ -12,7 +12,7 @@ from engine import (
     generate_report_qr_code
 )
 
-# Your live Streamlit Cloud URL (never blocked by mobile carriers)
+# Your live Streamlit Cloud URL
 APP_PUBLIC_URL = "https://aicte-scrutiny-assistant-fyztjom2ndeysdummktxxn.streamlit.app"
 
 st.set_page_config(page_title="AICTE Document Scanner & Scrutiny System", layout="wide")
@@ -21,29 +21,21 @@ st.set_page_config(page_title="AICTE Document Scanner & Scrutiny System", layout
 query_params = st.query_params
 if "report" in query_params:
     try:
-        findings, summary = decode_qr_report_param(query_params["report"])
-        pdf_bytes = generate_scrutiny_pdf(findings, summary)
-        pdf_filename = f"AICTE_Report_{summary['institution'].replace(' ', '_')}.pdf"
+        summary = decode_qr_report_param(query_params["report"])
 
-        st.title("📱 AICTE Mobile Report Portal")
-        st.success(f"**Verified Audit Report for:** {summary['institution']}")
+        st.title("📱 AICTE Mobile Verification Portal")
+        st.success(f"**Verified Institution:** {summary['institution']}")
         st.metric("Compliance Score", f"{summary['compliance_score']}%", summary["verdict_status"])
-
-        st.download_button(
-            label="📥 TAP HERE TO DOWNLOAD PDF REPORT",
-            data=pdf_bytes,
-            file_name=pdf_filename,
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
-        st.divider()
-        st.subheader("Summary Breakdown")
-        for item in findings:
-            st.write(f"**{item['check']}**: `{item['status']}` — {item['extracted']}")
+        
+        st.write(f"- **Programme Category:** {summary['programme']}")
+        st.write(f"- **Verified Parameters:** {summary['verified_count']} / {summary['total_checks']}")
+        st.write(f"- **Deficiencies Flagged:** {summary['flagged_count']}")
+        st.write(f"- **Audit Timestamp:** {summary['timestamp']}")
+        
+        st.info("Official AICTE Decision-Support system confirms this digital certificate record.")
         st.stop()
-    except Exception as e:
-        st.error("Invalid or expired QR report link.")
+    except Exception:
+        st.error("Invalid or expired QR verification link.")
 
 st.title("AICTE EoA Smart Document Scanner & Resultant Report System")
 st.caption("AI-Powered Document Scanner, Authenticity Verifier & Automated APH Compliance Decision-Support")
@@ -105,16 +97,16 @@ if active_file:
                     use_container_width=True
                 )
 
-                st.markdown("#### 📱 Scan QR Code to Download Report on Mobile")
-                qr_url = create_self_contained_qr_url(APP_PUBLIC_URL, findings, summary)
+                st.markdown("#### 📱 Scan Clean QR Code on Mobile")
+                qr_url = create_self_contained_qr_url(APP_PUBLIC_URL, summary)
                 qr_img_buf = generate_report_qr_code(qr_url)
 
-                qcol1, qcol2 = st.columns([1, 1.4])
+                qcol1, qcol2 = st.columns([1.2, 1.5])
                 with qcol1:
-                    st.image(qr_img_buf, caption="Scan with Phone", width=180)
+                    st.image(qr_img_buf, caption="Scan with Phone Camera", width=240)
                 with qcol2:
-                    st.success("**100% Carrier-Safe Mobile Link Ready!**")
-                    st.write("Scan with any phone camera to open the mobile verification portal and download the official PDF.")
+                    st.success("**Clean & Scannable!**")
+                    st.write("This low-density QR code instantly locks and scans with any smartphone camera.")
 
             with col2:
                 st.subheader("3. Structured Parameter Breakdown")
