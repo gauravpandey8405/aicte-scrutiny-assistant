@@ -1,15 +1,19 @@
 import fitz
 import re
-try:
-    import cv2
-    CV2_AVAILABLE = True
-except ImportError:
-    CV2_AVAILABLE = False
 import numpy as np
 from datetime import datetime
 from dateutil import parser
 from PIL import Image, ImageChops, ImageEnhance
 import os
+import io
+import qrcode
+import requests
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
 
 AICTE_APH_NORMS = {
     "Engineering": {
@@ -311,3 +315,28 @@ def generate_scrutiny_pdf(findings, summary):
     pdf_bytes = doc.write()
     doc.close()
     return pdf_bytes
+
+def upload_pdf_for_qr_download(pdf_bytes, filename="AICTE_Report.pdf"):
+    """Uploads the PDF to a temporary cloud bucket and returns a direct download URL for the QR code"""
+    try:
+        files = {'file': (filename, pdf_bytes, 'application/pdf')}
+        response = requests.post('https://tmpfiles.org/api/v1/upload', files=files, timeout=8)
+        if response.status_code == 200:
+            raw_url = response.json()['data']['url']
+            # Convert standard view URL to direct download URL
+            direct_dl_url = raw_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
+            return direct_dl_url
+    except Exception:
+        pass
+    return None
+
+def generate_report_qr_code(qr_payload):
+    """Generates a scannable QR code PIL image from a URL or text summary"""
+    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr.add_data(qr_payload)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf

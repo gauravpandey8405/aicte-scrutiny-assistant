@@ -6,7 +6,9 @@ from engine import (
     run_scrutiny_checks,
     detect_ela,
     scan_qr_and_barcodes,
-    generate_scrutiny_pdf
+    generate_scrutiny_pdf,
+    upload_pdf_for_qr_download,
+    generate_report_qr_code
 )
 
 st.set_page_config(page_title="AICTE Document Scanner & Scrutiny System", layout="wide")
@@ -56,18 +58,45 @@ if active_file:
             col1, col2 = st.columns([1, 1.2])
 
             with col1:
-                st.subheader("2. Scanned Document Stream")
+                st.subheader("2. Scanned Document & Instant QR Download")
                 st.info(f"**Target Institution:** {summary['institution']}")
-                st.text_area("Extracted Digital Text", text, height=380)
+                st.text_area("Extracted Digital Text", text, height=250)
 
+                pdf_filename = f"AICTE_Resultant_Report_{summary['institution'].replace(' ', '_')}.pdf"
                 pdf_report = generate_scrutiny_pdf(findings, summary)
+
                 st.download_button(
                     label="📥 Download Resultant Scrutiny Report (PDF)",
                     data=pdf_report,
-                    file_name=f"AICTE_Resultant_Report_{summary['institution'].replace(' ', '_')}.pdf",
+                    file_name=pdf_filename,
                     mime="application/pdf",
                     use_container_width=True
                 )
+
+                st.markdown("#### 📱 Scan QR Code to Download Report on Mobile")
+                with st.spinner("Generating direct mobile download QR code..."):
+                    dl_url = upload_pdf_for_qr_download(pdf_report, filename=pdf_filename)
+                    if dl_url:
+                        qr_img_buf = generate_report_qr_code(dl_url)
+                        qcol1, qcol2 = st.columns([1, 1.5])
+                        with qcol1:
+                            st.image(qr_img_buf, caption="Scan to Download PDF", width=180)
+                        with qcol2:
+                            st.success("**Mobile Download Ready!**")
+                            st.write("Point any smartphone camera at this QR code to immediately download the PDF report.")
+                            st.markdown(f"🔗 [Direct PDF Link]({dl_url})")
+                    else:
+                        fallback_summary = (
+                            f"AICTE SCRUTINY AUDIT REPORT\n"
+                            f"Institution: {summary['institution']}\n"
+                            f"Category: {summary['programme']}\n"
+                            f"Score: {summary['compliance_score']}%\n"
+                            f"Verdict: {summary['verdict_status']}\n"
+                            f"Verified: {summary['verified_count']}/{summary['total_checks']}\n"
+                            f"Timestamp: {summary['timestamp']}"
+                        )
+                        qr_img_buf = generate_report_qr_code(fallback_summary)
+                        st.image(qr_img_buf, caption="Scan for Instant Digital Verification Summary", width=180)
 
             with col2:
                 st.subheader("3. Structured Parameter Breakdown")
@@ -89,7 +118,7 @@ if active_file:
                     else:
                         st.success(f"**[{item['status']}] {item['check']}**")
                     st.write(f"- **Extracted Value:** `{item['extracted']}` | **Clause:** {item['rule']}")
-                    st.write(f"- **Scanner Finding:** {item['observation']}")
+                    st.write(f"- **Scanner Observation:** {item['observation']}")
 
         else:
             st.subheader("1. Forensic Image & QR Scanner Resultant Report")
