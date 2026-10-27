@@ -1,70 +1,123 @@
 import streamlit as st
+import pandas as pd
 import os
-from engine import extract_text_from_file, run_scrutiny_checks, detect_ela, generate_scrutiny_pdf
+from engine import (
+    extract_text_from_file,
+    run_scrutiny_checks,
+    detect_ela,
+    scan_qr_and_barcodes,
+    generate_scrutiny_pdf
+)
 
-st.set_page_config(page_title="AICTE Scrutiny Assistant", layout="wide")
+st.set_page_config(page_title="AICTE Document Scanner & Scrutiny System", layout="wide")
 
-st.title("AICTE EoA Scrutiny Decision-Support System")
-st.caption("Universal AI Pre-Screening, Document Authentication & APH Regulatory Compliance Engine")
+st.title("AICTE EoA Smart Document Scanner & Resultant Report System")
+st.caption("AI-Powered Document Scanner, Authenticity Verifier & Automated APH Compliance Decision-Support")
 
-uploaded_file = st.file_uploader("Upload Any College Scrutiny Dossier (.pdf, .txt, .png, .jpg)", type=["pdf", "txt", "png", "jpg"])
+tab1, tab2 = st.tabs(["📂 Upload Dossier Scanner (PDF / Image / TXT)", "📸 Live Camera Document / QR Scanner"])
 
-if uploaded_file:
-    file_path = f"temp_{uploaded_file.name}"
+with tab1:
+    uploaded_file = st.file_uploader("Drop College Dossier or Certificate to Scan", type=["pdf", "txt", "png", "jpg", "jpeg"])
+
+with tab2:
+    camera_photo = st.camera_input("Scan Physical Certificate or QR Code via Webcam")
+
+active_file = uploaded_file if uploaded_file is not None else camera_photo
+
+if active_file:
+    file_path = f"temp_{active_file.name}"
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.read())
+        f.write(active_file.read())
 
     try:
-        col1, col2 = st.columns([1, 1])
+        if file_path.endswith((".pdf", ".txt")):
+            text = extract_text_from_file(file_path)
+            findings, summary = run_scrutiny_checks(text)
 
-        with col1:
-            st.subheader("Submitted Document Preview")
-            if file_path.endswith((".pdf", ".txt")):
-                text = extract_text_from_file(file_path)
-                st.text_area("Extracted Digital Text (OCR / Stream)", text, height=450)
+            st.subheader("1. Executive Scanner Resultant Report")
+            if summary["badge_color"] == "success":
+                st.success(f"### ✅ FINAL VERDICT: {summary['verdict_status']}")
+            elif summary["badge_color"] == "warning":
+                st.warning(f"### ⚠️ FINAL VERDICT: {summary['verdict_status']}")
             else:
-                st.image(file_path, caption="Uploaded File / Infrastructure Proof", use_container_width=True)
+                st.error(f"### 🚨 FINAL VERDICT: {summary['verdict_status']}")
 
-        with col2:
-            st.subheader("Universal AICTE Handbook Audit Findings")
-            if file_path.endswith((".pdf", ".txt")):
-                findings, detected_college = run_scrutiny_checks(text)
-                
-                total_checks = len(findings)
-                flagged_count = sum(1 for f in findings if "FLAGGED" in f["status"])
-                verified_count = total_checks - flagged_count
-                
-                st.info(f"**Evaluated Entity:** {detected_college}")
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Total Checks", total_checks)
-                m2.metric("Compliant", verified_count)
-                m3.metric("Flagged Deficiencies", flagged_count)
-                st.divider()
+            st.markdown(f"**Scrutiny Action Plan:** {summary['action_plan']}")
 
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Institution Category", summary["programme"])
+            c2.metric("Compliance Score", f"{summary['compliance_score']}%")
+            c3.metric("Verified Parameters", f"{summary['verified_count']} / {summary['total_checks']}")
+            c4.metric("Deficiencies Flagged", summary["flagged_count"])
+
+            st.progress(summary["compliance_score"] / 100)
+            st.divider()
+
+            col1, col2 = st.columns([1, 1.2])
+
+            with col1:
+                st.subheader("2. Scanned Document Stream")
+                st.info(f"**Target Institution:** {summary['institution']}")
+                st.text_area("Extracted Digital Text", text, height=380)
+
+                pdf_report = generate_scrutiny_pdf(findings, summary)
+                st.download_button(
+                    label="📥 Download Resultant Scrutiny Report (PDF)",
+                    data=pdf_report,
+                    file_name=f"AICTE_Resultant_Report_{summary['institution'].replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+            with col2:
+                st.subheader("3. Structured Parameter Breakdown")
+                df = pd.DataFrame([
+                    {
+                        "Parameter": f["check"],
+                        "Extracted Value": f["extracted"],
+                        "Status": f["status"],
+                        "Applicable Clause": f["rule"]
+                    }
+                    for f in findings
+                ])
+                st.dataframe(df, use_container_width=True, hide_index=True)
+
+                st.subheader("4. Detailed Evidence-Linked Clause Audit")
                 for item in findings:
                     if "FLAGGED" in item["status"]:
                         st.error(f"**[{item['status']}] {item['check']}**")
                     else:
                         st.success(f"**[{item['status']}] {item['check']}**")
-                    st.write(f"- **Extracted Value:** `{item['extracted']}`")
-                    st.write(f"- **Statutory Clause:** {item['rule']}")
-                    st.write(f"- **Officer Note:** {item['observation']}")
-                    st.divider()
+                    st.write(f"- **Extracted Value:** `{item['extracted']}` | **Clause:** {item['rule']}")
+                    st.write(f"- **Scanner Finding:** {item['observation']}")
 
-                pdf_report = generate_scrutiny_pdf(findings, institution_name=detected_college)
-                st.download_button(
-                    label="📄 Download Official Scrutiny Audit Report (PDF)",
-                    data=pdf_report,
-                    file_name=f"AICTE_Audit_{detected_college.replace(' ', '_')}.pdf",
-                    mime="application/pdf"
-                )
-            else:
-                st.write("Running Error Level Analysis (ELA) for image manipulation check...")
-                ela_img = detect_ela(file_path)
-                st.image(ela_img, caption="Forensic Compression Heatmap", use_container_width=True)
-                st.warning("Advisory: Pixel brightness spikes highlight localized modification/pasted content.")
-                
+        else:
+            st.subheader("1. Forensic Image & QR Scanner Resultant Report")
+            ela_img, max_diff = detect_ela(file_path)
+            qr_codes = scan_qr_and_barcodes(file_path)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.image(file_path, caption="Original Scanned Document / Infrastructure Photo", use_container_width=True)
+            with col2:
+                st.image(ela_img, caption="Forensic Error Level Analysis (ELA) Map", use_container_width=True)
+
+            st.divider()
+            r1, r2 = st.columns(2)
+            with r1:
+                st.markdown("#### 🔍 Digital Tampering Verdict")
+                if max_diff > 35:
+                    st.error(f"**[FLAGGED - ANOMALY DETECTED]** High compression variance (Score: {max_diff}). Localized pixel editing or pasted text suspected.")
+                else:
+                    st.success(f"**[VERIFIED - CONSISTENT]** Uniform compression profile (Score: {max_diff}). No obvious pixel overlay anomalies.")
+
+            with r2:
+                st.markdown("#### 📱 Embedded QR / Digital Verification")
+                if qr_codes:
+                    st.success(f"**[QR VERIFIED]** Extracted Issuing-Authority Payload: `{qr_codes[0]}`")
+                else:
+                    st.warning("**[NO QR DETECTED]** No machine-readable QR code found on this image. Route for manual authority check.")
+
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
