@@ -7,11 +7,43 @@ from engine import (
     detect_ela,
     scan_qr_and_barcodes,
     generate_scrutiny_pdf,
-    upload_pdf_for_qr_download,
+    create_self_contained_qr_url,
+    decode_qr_report_param,
     generate_report_qr_code
 )
 
+# Your live Streamlit Cloud URL (never blocked by mobile carriers)
+APP_PUBLIC_URL = "https://aicte-scrutiny-assistant-fyztjom2ndeysdummktxxn.streamlit.app"
+
 st.set_page_config(page_title="AICTE Document Scanner & Scrutiny System", layout="wide")
+
+# Check if opened via Mobile QR Code Scan
+query_params = st.query_params
+if "report" in query_params:
+    try:
+        findings, summary = decode_qr_report_param(query_params["report"])
+        pdf_bytes = generate_scrutiny_pdf(findings, summary)
+        pdf_filename = f"AICTE_Report_{summary['institution'].replace(' ', '_')}.pdf"
+
+        st.title("📱 AICTE Mobile Report Portal")
+        st.success(f"**Verified Audit Report for:** {summary['institution']}")
+        st.metric("Compliance Score", f"{summary['compliance_score']}%", summary["verdict_status"])
+
+        st.download_button(
+            label="📥 TAP HERE TO DOWNLOAD PDF REPORT",
+            data=pdf_bytes,
+            file_name=pdf_filename,
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
+        st.divider()
+        st.subheader("Summary Breakdown")
+        for item in findings:
+            st.write(f"**{item['check']}**: `{item['status']}` — {item['extracted']}")
+        st.stop()
+    except Exception as e:
+        st.error("Invalid or expired QR report link.")
 
 st.title("AICTE EoA Smart Document Scanner & Resultant Report System")
 st.caption("AI-Powered Document Scanner, Authenticity Verifier & Automated APH Compliance Decision-Support")
@@ -58,9 +90,9 @@ if active_file:
             col1, col2 = st.columns([1, 1.2])
 
             with col1:
-                st.subheader("2. Scanned Document & Instant QR Download")
+                st.subheader("2. Scanned Document & Mobile QR Download")
                 st.info(f"**Target Institution:** {summary['institution']}")
-                st.text_area("Extracted Digital Text", text, height=250)
+                st.text_area("Extracted Digital Text", text, height=230)
 
                 pdf_filename = f"AICTE_Resultant_Report_{summary['institution'].replace(' ', '_')}.pdf"
                 pdf_report = generate_scrutiny_pdf(findings, summary)
@@ -74,29 +106,15 @@ if active_file:
                 )
 
                 st.markdown("#### 📱 Scan QR Code to Download Report on Mobile")
-                with st.spinner("Generating direct mobile download QR code..."):
-                    dl_url = upload_pdf_for_qr_download(pdf_report, filename=pdf_filename)
-                    if dl_url:
-                        qr_img_buf = generate_report_qr_code(dl_url)
-                        qcol1, qcol2 = st.columns([1, 1.5])
-                        with qcol1:
-                            st.image(qr_img_buf, caption="Scan to Download PDF", width=180)
-                        with qcol2:
-                            st.success("**Mobile Download Ready!**")
-                            st.write("Point any smartphone camera at this QR code to immediately download the PDF report.")
-                            st.markdown(f"🔗 [Direct PDF Link]({dl_url})")
-                    else:
-                        fallback_summary = (
-                            f"AICTE SCRUTINY AUDIT REPORT\n"
-                            f"Institution: {summary['institution']}\n"
-                            f"Category: {summary['programme']}\n"
-                            f"Score: {summary['compliance_score']}%\n"
-                            f"Verdict: {summary['verdict_status']}\n"
-                            f"Verified: {summary['verified_count']}/{summary['total_checks']}\n"
-                            f"Timestamp: {summary['timestamp']}"
-                        )
-                        qr_img_buf = generate_report_qr_code(fallback_summary)
-                        st.image(qr_img_buf, caption="Scan for Instant Digital Verification Summary", width=180)
+                qr_url = create_self_contained_qr_url(APP_PUBLIC_URL, findings, summary)
+                qr_img_buf = generate_report_qr_code(qr_url)
+
+                qcol1, qcol2 = st.columns([1, 1.4])
+                with qcol1:
+                    st.image(qr_img_buf, caption="Scan with Phone", width=180)
+                with qcol2:
+                    st.success("**100% Carrier-Safe Mobile Link Ready!**")
+                    st.write("Scan with any phone camera to open the mobile verification portal and download the official PDF.")
 
             with col2:
                 st.subheader("3. Structured Parameter Breakdown")

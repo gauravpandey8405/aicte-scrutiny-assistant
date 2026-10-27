@@ -8,6 +8,9 @@ import os
 import io
 import qrcode
 import requests
+import base64
+import json
+import urllib.parse
 
 try:
     import cv2
@@ -316,23 +319,66 @@ def generate_scrutiny_pdf(findings, summary):
     doc.close()
     return pdf_bytes
 
-def upload_pdf_for_qr_download(pdf_bytes, filename="AICTE_Report.pdf"):
-    """Uploads the PDF to a temporary cloud bucket and returns a direct download URL for the QR code"""
-    try:
-        files = {'file': (filename, pdf_bytes, 'application/pdf')}
-        response = requests.post('https://tmpfiles.org/api/v1/upload', files=files, timeout=8)
-        if response.status_code == 200:
-            raw_url = response.json()['data']['url']
-            # Convert standard view URL to direct download URL
-            direct_dl_url = raw_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
-            return direct_dl_url
-    except Exception:
-        pass
-    return None
+
+
+def create_self_contained_qr_url(base_app_url, findings, summary):
+    """Encodes the audit report into a compact URL parameter hosted on your own Streamlit app"""
+    compact_payload = {
+        "inst": summary["institution"],
+        "prog": summary["programme"],
+        "score": summary["compliance_score"],
+        "verdict": summary["verdict_status"],
+        "color": summary["badge_color"],
+        "action": summary["action_plan"],
+        "ts": summary["timestamp"],
+        "ver": summary["verified_count"],
+        "tot": summary["total_checks"],
+        "flag": summary["flagged_count"],
+        "items": [
+            {
+                "c": f["check"],
+                "s": f["status"],
+                "e": f["extracted"],
+                "r": f["rule"],
+                "o": f["observation"]
+            }
+            for f in findings
+        ]
+    }
+    json_bytes = json.dumps(compact_payload).encode("utf-8")
+    b64_str = base64.urlsafe_b64encode(json_bytes).decode("utf-8")
+    return f"{base_app_url.rstrip('/')}/?report={urllib.parse.quote(b64_str)}"
+
+def decode_qr_report_param(b64_param):
+    """Decodes the URL parameter back into findings and summary for instant mobile PDF download"""
+    json_bytes = base64.urlsafe_b64decode(b64_param.encode("utf-8"))
+    data = json.loads(json_bytes.decode("utf-8"))
+    summary = {
+        "institution": data["inst"],
+        "programme": data["prog"],
+        "compliance_score": data["score"],
+        "verdict_status": data["verdict"],
+        "badge_color": data["color"],
+        "action_plan": data["action"],
+        "timestamp": data["ts"],
+        "verified_count": data["ver"],
+        "total_checks": data["tot"],
+        "flagged_count": data["flag"]
+    }
+    findings = [
+        {
+            "check": i["c"],
+            "status": i["s"],
+            "extracted": i["e"],
+            "rule": i["r"],
+            "observation": i["o"]
+        }
+        for i in data["items"]
+    ]
+    return findings, summary
 
 def generate_report_qr_code(qr_payload):
-    """Generates a scannable QR code PIL image from a URL or text summary"""
-    qr = qrcode.QRCode(version=1, box_size=8, border=2)
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=6, border=2)
     qr.add_data(qr_payload)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
