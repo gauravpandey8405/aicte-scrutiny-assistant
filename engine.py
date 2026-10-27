@@ -1,6 +1,10 @@
 import fitz
 import re
-import cv2
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
 import numpy as np
 from datetime import datetime
 from dateutil import parser
@@ -46,6 +50,8 @@ def extract_text_from_file(file_path):
     return ""
 
 def scan_qr_and_barcodes(image_path):
+    if not CV2_AVAILABLE:
+        return []
     img = cv2.imread(image_path)
     if img is None:
         return []
