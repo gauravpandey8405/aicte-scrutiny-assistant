@@ -1,4 +1,4 @@
-import fitz
+import fitz  # PyMuPDF
 import re
 import numpy as np
 from datetime import datetime
@@ -7,7 +7,6 @@ from PIL import Image, ImageChops, ImageEnhance
 import os
 import io
 import qrcode
-import requests
 import base64
 import json
 import urllib.parse
@@ -319,10 +318,7 @@ def generate_scrutiny_pdf(findings, summary):
     doc.close()
     return pdf_bytes
 
-
-
 def create_self_contained_qr_url(base_app_url, summary):
-    """Encodes a lightweight summary into the URL for a clean, scannable QR code"""
     compact_payload = {
         "inst": summary["institution"],
         "prog": summary["programme"],
@@ -339,7 +335,6 @@ def create_self_contained_qr_url(base_app_url, summary):
     return f"{base_app_url.rstrip('/')}/?report={urllib.parse.quote(b64_str)}"
 
 def decode_qr_report_param(b64_param):
-    """Decodes the lightweight metadata for the mobile verification view"""
     json_bytes = base64.urlsafe_b64decode(b64_param.encode("utf-8"))
     data = json.loads(json_bytes.decode("utf-8"))
     summary = {
@@ -356,19 +351,7 @@ def decode_qr_report_param(b64_param):
     return summary
 
 def generate_report_qr_code(qr_payload):
-    """Generates a larger, low-density QR code image optimized for phone cameras"""
     qr = qrcode.QRCode(version=2, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=3)
-    qr.add_data(qr_payload)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return buf
-
-
-def generate_report_qr_code(qr_payload):
-    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=6, border=2)
     qr.add_data(qr_payload)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
